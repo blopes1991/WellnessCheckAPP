@@ -1,23 +1,462 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <link rel="manifest" href="manifest.json" />
-  <meta name="theme-color" content="#ffffff" />
-
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>My App</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#123b3a">
+  <title>Wellness Check</title>
+  <link rel="manifest" href="manifest.json">
+  <style>
+    :root {
+      --bg: #f2f6f4;
+      --card: #ffffff;
+      --ink: #172b2a;
+      --muted: #4d6c6a;
+      --line: #c8d8d3;
+      --accent: #156f63;
+      --accent-soft: #d7f0ea;
+      --warn-soft: #fee2e2;
+      --warn-ink: #9f1239;
+      --radius: 16px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Avenir Next", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top right, #d7efe8 0%, transparent 45%),
+        radial-gradient(circle at bottom left, #fdeed8 0%, transparent 40%),
+        var(--bg);
+      min-height: 100vh;
+    }
+    main {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 20px 14px 32px;
+      display: grid;
+      gap: 14px;
+    }
+    .hero {
+      padding: 16px 18px;
+      border-radius: var(--radius);
+      background: linear-gradient(135deg, #0f5a52 0%, #1c8b7d 100%);
+      color: #f6fffd;
+    }
+    h1, h2, h3, p { margin: 0; }
+    .hero h1 { font-size: 1.4rem; letter-spacing: 0.01em; margin-bottom: 6px; }
+    .hero p { color: #d8f8f1; font-size: 0.95rem; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 14px;
+      box-shadow: 0 4px 18px rgba(13, 52, 48, 0.06);
+    }
+    .section-title { font-size: 1rem; margin-bottom: 10px; }
+    form { display: grid; gap: 10px; }
+    .row { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    label { display: grid; gap: 5px; font-size: 0.85rem; color: var(--muted); }
+    input, select, button { font: inherit; }
+    input, select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+      color: var(--ink);
+      background: #fff;
+    }
+    button { border: 0; border-radius: 10px; padding: 10px 12px; cursor: pointer; font-weight: 600; }
+    .btn-main { background: var(--accent); color: #fff; }
+    .btn-light { background: var(--accent-soft); color: #0b443d; }
+    .chart-wrap {
+      width: 100%;
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fcfffe;
+    }
+    #tempChart { width: 100%; min-height: 260px; display: block; }
+    .insight-grid {
+      display: grid;
+      gap: 8px;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      margin-top: 10px;
+    }
+    .insight { background: #f7fbf9; border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+    .insight .k {
+      color: var(--muted);
+      font-size: 0.75rem;
+      margin-bottom: 3px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .insight .v { font-weight: 700; font-size: 0.95rem; }
+    .muted { color: var(--muted); font-size: 0.85rem; margin-top: 8px; }
+    .list { margin-top: 10px; display: grid; gap: 6px; }
+    .entry {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 8px 10px;
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: center;
+      background: #fbfffd;
+    }
+    .entry small { color: var(--muted); display: block; margin-top: 2px; }
+    .entry button {
+      background: var(--warn-soft);
+      color: var(--warn-ink);
+      padding: 7px 10px;
+      font-size: 0.8rem;
+      white-space: nowrap;
+    }
+    @media (max-width: 640px) { .row { grid-template-columns: 1fr; } }
+  </style>
 </head>
 <body>
-  <script>
-  if ("serviceWorker" in navigator) {
-    window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./service-worker.js");
-    });
-  }
-  </script>
+  <main>
+    <section class="hero">
+      <h1>Wellness Check</h1>
+      <p>Track daily basal temperature and period dates in one place.</p>
+    </section>
+    <section class="card">
+      <h2 class="section-title">Daily Basal Temperature</h2>
+      <form id="tempForm">
+        <div class="row">
+          <label>Date<input id="tempDate" type="date" required></label>
+          <label>Temperature<input id="tempValue" type="number" inputmode="decimal" step="0.01" required placeholder="e.g. 97.56"></label>
+        </div>
+        <div class="row">
+          <label>Unit<select id="tempUnit"><option value="F">Fahrenheit (F)</option><option value="C">Celsius (C)</option></select></label>
+          <div style="display:grid;align-items:end;"><button class="btn-main" type="submit">Save Temperature</button></div>
+        </div>
+      </form>
+    </section>
+    <section class="card">
+      <h2 class="section-title">Period Dates</h2>
+      <form id="periodForm">
+        <div class="row">
+          <label>Start date<input id="periodStart" type="date" required></label>
+          <label>End date<input id="periodEnd" type="date" required></label>
+        </div>
+        <button class="btn-main" type="submit">Save Period Range</button>
+      </form>
+      <p class="muted">Period ranges are highlighted on the chart.</p>
+    </section>
+    <section class="card">
+      <h2 class="section-title">Temperature Trend (Last 6 Months)</h2>
+      <div class="chart-wrap"><svg id="tempChart" viewBox="0 0 800 280" preserveAspectRatio="none" aria-label="Basal temperature chart"></svg></div>
+      <div id="chartHint" class="muted"></div>
+      <div class="insight-grid" id="insightGrid"></div>
+      <p class="muted">Ovulation estimate is based on average cycle length and should not be treated as medical advice.</p>
+    </section>
+    <section class="card">
+      <h3 class="section-title">Recent Entries</h3>
+      <button id="exportBtn" type="button" class="btn-light">Export Data (JSON)</button>
+      <div class="list" id="tempsList"></div>
+      <div class="list" id="periodsList"></div>
+    </section>
+  </main>
 
-  <h1>My phone app (PWA)</h1>
-  <p>If you can see this, it’s working.</p>
+  <script>
+    const STORAGE_KEY = "wellness-check-v1";
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const state = loadState();
+
+    const tempForm = document.getElementById("tempForm");
+    const periodForm = document.getElementById("periodForm");
+    const exportBtn = document.getElementById("exportBtn");
+
+    const tempDateEl = document.getElementById("tempDate");
+    const tempValueEl = document.getElementById("tempValue");
+    const tempUnitEl = document.getElementById("tempUnit");
+    const periodStartEl = document.getElementById("periodStart");
+    const periodEndEl = document.getElementById("periodEnd");
+
+    const tempsListEl = document.getElementById("tempsList");
+    const periodsListEl = document.getElementById("periodsList");
+    const chartEl = document.getElementById("tempChart");
+    const chartHintEl = document.getElementById("chartHint");
+    const insightGridEl = document.getElementById("insightGrid");
+
+    tempDateEl.value = isoToday();
+    periodStartEl.value = isoToday();
+    periodEndEl.value = isoToday();
+
+    tempForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const date = tempDateEl.value;
+      const value = Number(tempValueEl.value);
+      const unit = tempUnitEl.value;
+      if (!date || Number.isNaN(value)) return;
+
+      const existing = state.temperatures.find((t) => t.date === date);
+      if (existing) {
+        existing.value = value;
+        existing.unit = unit;
+      } else {
+        state.temperatures.push({ date, value, unit });
+      }
+
+      sortTemps();
+      saveState();
+      tempValueEl.value = "";
+      render();
+    });
+
+    periodForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const start = periodStartEl.value;
+      const end = periodEndEl.value;
+      if (!start || !end) return;
+
+      if (new Date(start) > new Date(end)) {
+        alert("Start date cannot be after end date.");
+        return;
+      }
+
+      const existing = state.periods.find((p) => p.start === start && p.end === end);
+      if (!existing) state.periods.push({ start, end });
+
+      sortPeriods();
+      saveState();
+      render();
+    });
+
+    exportBtn.addEventListener("click", () => {
+      const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `wellness-check-export-${isoToday()}.json`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+    });
+
+    function loadState() {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return { temperatures: [], periods: [] };
+      try {
+        const parsed = JSON.parse(raw);
+        return {
+          temperatures: Array.isArray(parsed.temperatures) ? parsed.temperatures : [],
+          periods: Array.isArray(parsed.periods) ? parsed.periods : []
+        };
+      } catch {
+        return { temperatures: [], periods: [] };
+      }
+    }
+
+    function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+    function sortTemps() { state.temperatures.sort((a, b) => new Date(a.date) - new Date(b.date)); }
+    function sortPeriods() { state.periods.sort((a, b) => new Date(b.start) - new Date(a.start)); }
+    function isoToday() { return new Date().toISOString().slice(0, 10); }
+
+    function formatDate(input) {
+      const d = new Date(input + "T00:00:00");
+      return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+    }
+
+    function cToF(c) { return (c * 9 / 5) + 32; }
+    function toFahrenheit(entry) { return entry.unit === "C" ? cToF(entry.value) : entry.value; }
+    function normalizeChartTemps(entries) {
+      return entries.map((t) => ({ ...t, chartValue: toFahrenheit(t) }));
+    }
+
+    function renderTempsList() {
+      if (!state.temperatures.length) {
+        tempsListEl.innerHTML = "<p class='muted'>No temperature entries yet.</p>";
+        return;
+      }
+
+      const latest = [...state.temperatures].slice(-20).reverse();
+      tempsListEl.innerHTML = latest.map((entry) => `
+        <div class="entry">
+          <div><strong>${entry.value.toFixed(2)} ${entry.unit}</strong><small>${formatDate(entry.date)}</small></div>
+          <button type="button" data-delete-temp="${entry.date}">Delete</button>
+        </div>
+      `).join("");
+
+      tempsListEl.querySelectorAll("[data-delete-temp]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const date = btn.getAttribute("data-delete-temp");
+          state.temperatures = state.temperatures.filter((t) => t.date !== date);
+          saveState();
+          render();
+        });
+      });
+    }
+
+    function renderPeriodsList() {
+      if (!state.periods.length) {
+        periodsListEl.innerHTML = "<p class='muted'>No period ranges yet.</p>";
+        return;
+      }
+
+      const latest = [...state.periods].slice(0, 20);
+      periodsListEl.innerHTML = latest.map((entry, idx) => `
+        <div class="entry">
+          <div><strong>Period: ${formatDate(entry.start)} - ${formatDate(entry.end)}</strong></div>
+          <button type="button" data-delete-period="${idx}">Delete</button>
+        </div>
+      `).join("");
+
+      periodsListEl.querySelectorAll("[data-delete-period]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const idx = Number(btn.getAttribute("data-delete-period"));
+          state.periods.splice(idx, 1);
+          saveState();
+          render();
+        });
+      });
+    }
+
+    function cycleInsights() {
+      const starts = [...state.periods].map((p) => p.start).sort((a, b) => new Date(a) - new Date(b));
+      if (starts.length < 2) return { averageCycle: null, nextPeriod: null, ovulationEstimate: null };
+
+      const lengths = [];
+      for (let i = 1; i < starts.length; i += 1) {
+        const prev = new Date(starts[i - 1]);
+        const curr = new Date(starts[i]);
+        lengths.push(Math.round((curr - prev) / DAY_MS));
+      }
+
+      const averageCycle = Math.round(lengths.reduce((sum, n) => sum + n, 0) / lengths.length);
+      const lastStart = new Date(starts[starts.length - 1]);
+      const nextPeriod = new Date(lastStart.getTime() + averageCycle * DAY_MS);
+      const ovulationEstimate = new Date(nextPeriod.getTime() - 14 * DAY_MS);
+      return { averageCycle, nextPeriod, ovulationEstimate };
+    }
+
+    function renderInsights() {
+      const latestTemp = state.temperatures[state.temperatures.length - 1] || null;
+      const insight = cycleInsights();
+
+      const items = [
+        { key: "Last Temp", value: latestTemp ? `${latestTemp.value.toFixed(2)} ${latestTemp.unit}` : "-" },
+        { key: "Avg Cycle", value: insight.averageCycle ? `${insight.averageCycle} days` : "-" },
+        { key: "Est. Ovulation", value: insight.ovulationEstimate ? formatDate(insight.ovulationEstimate.toISOString().slice(0, 10)) : "-" },
+        { key: "Next Period", value: insight.nextPeriod ? formatDate(insight.nextPeriod.toISOString().slice(0, 10)) : "-" }
+      ];
+
+      insightGridEl.innerHTML = items.map((item) => `
+        <article class="insight"><div class="k">${item.key}</div><div class="v">${item.value}</div></article>
+      `).join("");
+    }
+
+    function renderChart() {
+      if (!state.temperatures.length) {
+        chartEl.innerHTML = "";
+        chartHintEl.textContent = "Add temperature entries to see your trend line.";
+        return;
+      }
+
+      const chartData = normalizeChartTemps(state.temperatures);
+      const maxDate = new Date(chartData[chartData.length - 1].date);
+      const minDate = new Date(maxDate.getTime() - 183 * DAY_MS);
+      const display = chartData.filter((t) => new Date(t.date) >= minDate);
+
+      if (display.length < 2) {
+        chartEl.innerHTML = "";
+        chartHintEl.textContent = "Add at least 2 temperature entries to draw the trend.";
+        return;
+      }
+
+      const width = 800;
+      const height = 280;
+      const padL = 42;
+      const padR = 14;
+      const padT = 14;
+      const padB = 28;
+      const innerW = width - padL - padR;
+      const innerH = height - padT - padB;
+
+      const minTemp = Math.min(...display.map((d) => d.chartValue));
+      const maxTemp = Math.max(...display.map((d) => d.chartValue));
+      const yMin = minTemp - 0.15;
+      const yMax = maxTemp + 0.15;
+
+      const minXDate = new Date(display[0].date);
+      const maxXDate = new Date(display[display.length - 1].date);
+      const dateSpan = Math.max((maxXDate - minXDate) / DAY_MS, 1);
+
+      const xForDate = (iso) => {
+        const d = new Date(iso);
+        const dayOffset = (d - minXDate) / DAY_MS;
+        return padL + (dayOffset / dateSpan) * innerW;
+      };
+
+      const yForTemp = (val) => {
+        const t = (val - yMin) / (yMax - yMin);
+        return padT + (1 - t) * innerH;
+      };
+
+      const dPath = display.map((d, i) => {
+        const x = xForDate(d.date);
+        const y = yForTemp(d.chartValue);
+        return `${i === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
+      }).join(" ");
+
+      const ticks = 5;
+      const yGrid = Array.from({ length: ticks }, (_, i) => {
+        const ratio = i / (ticks - 1);
+        const val = yMax - ratio * (yMax - yMin);
+        const y = padT + ratio * innerH;
+        return `
+          <line x1="${padL}" y1="${y}" x2="${width - padR}" y2="${y}" stroke="#dce9e4" stroke-width="1" />
+          <text x="${padL - 6}" y="${y + 3}" text-anchor="end" font-size="10" fill="#5f7f7b">${val.toFixed(2)}</text>
+        `;
+      }).join("");
+
+      const periodRects = state.periods.map((p) => {
+        const start = new Date(p.start);
+        const end = new Date(p.end);
+        if (end < minXDate || start > maxXDate) return "";
+
+        const clampedStart = start < minXDate ? minXDate : start;
+        const clampedEnd = end > maxXDate ? maxXDate : end;
+        const x1 = xForDate(clampedStart.toISOString().slice(0, 10));
+        const x2 = xForDate(clampedEnd.toISOString().slice(0, 10));
+        return `<rect x="${x1}" y="${padT}" width="${Math.max(x2 - x1, 2)}" height="${innerH}" fill="#fde2e7" opacity="0.55"></rect>`;
+      }).join("");
+
+      const dots = display.map((d) => `<circle cx="${xForDate(d.date)}" cy="${yForTemp(d.chartValue)}" r="3.3" fill="#156f63"></circle>`).join("");
+      const xLabels = [display[0], display[Math.floor(display.length / 2)], display[display.length - 1]].map((d) => {
+        return `<text x="${xForDate(d.date)}" y="${height - 8}" text-anchor="middle" font-size="10" fill="#5f7f7b">${new Date(d.date).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</text>`;
+      }).join("");
+
+      chartEl.innerHTML = `
+        <rect x="0" y="0" width="${width}" height="${height}" fill="#fcfffe"></rect>
+        ${yGrid}
+        ${periodRects}
+        <path d="${dPath}" fill="none" stroke="#156f63" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"></path>
+        ${dots}
+        ${xLabels}
+      `;
+
+      chartHintEl.textContent = "Pink areas show period days. Trend line uses Fahrenheit for one consistent scale.";
+    }
+
+    function render() {
+      sortTemps();
+      sortPeriods();
+      renderTempsList();
+      renderPeriodsList();
+      renderChart();
+      renderInsights();
+    }
+
+    render();
+
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("service-worker.js").catch(() => {
+          // Silent failure is acceptable for local development.
+        });
+      });
+    }
+  </script>
 </body>
 </html>
