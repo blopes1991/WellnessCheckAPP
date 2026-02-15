@@ -284,6 +284,16 @@
       <p class="muted">Period ranges are highlighted on the chart.</p>
     </section>
     <section class="card">
+      <h2 class="section-title">Conception Tracking</h2>
+      <form id="inseminationForm">
+        <div class="row">
+          <label>Insemination Date<input id="inseminationDate" type="date" required></label>
+          <div style="display:grid;align-items:end;"><button class="btn-main" type="submit">Save Insemination Date</button></div>
+        </div>
+      </form>
+      <p class="muted">Insemination dates are marked on the chart.</p>
+    </section>
+    <section class="card">
       <div class="chart-header">
         <h2 class="section-title" style="margin:0;">Trend Log</h2>
         <div id="chartRangeTabs" class="chart-range-tabs" role="tablist" aria-label="Chart range">
@@ -327,6 +337,8 @@
       <div class="list" id="tempsList"></div>
       <p class="list-title">Period Entries</p>
       <div class="list" id="periodsList"></div>
+      <p class="list-title">Insemination Entries</p>
+      <div class="list" id="inseminationsList"></div>
     </section>
   </main>
 
@@ -338,6 +350,7 @@
 
     const tempForm = document.getElementById("tempForm");
     const periodForm = document.getElementById("periodForm");
+    const inseminationForm = document.getElementById("inseminationForm");
     const exportBtn = document.getElementById("exportBtn");
     const demo3mBtn = document.getElementById("demo3mBtn");
     const demo1yBtn = document.getElementById("demo1yBtn");
@@ -348,9 +361,11 @@
     const tempUnitEl = document.getElementById("tempUnit");
     const periodStartEl = document.getElementById("periodStart");
     const periodEndEl = document.getElementById("periodEnd");
+    const inseminationDateEl = document.getElementById("inseminationDate");
 
     const tempsListEl = document.getElementById("tempsList");
     const periodsListEl = document.getElementById("periodsList");
+    const inseminationsListEl = document.getElementById("inseminationsList");
     const chartEl = document.getElementById("tempChart");
     const chartInnerEl = document.getElementById("chartInner");
     const chartRangeTabsEl = document.getElementById("chartRangeTabs");
@@ -363,6 +378,7 @@
     tempDateEl.value = isoToday();
     periodStartEl.value = isoToday();
     periodEndEl.value = isoToday();
+    inseminationDateEl.value = isoToday();
 
     tempForm.addEventListener("submit", (event) => {
       event.preventDefault();
@@ -400,6 +416,21 @@
       if (!existing) state.periods.push({ start, end });
 
       sortPeriods();
+      saveState();
+      render();
+    });
+
+    inseminationForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const date = inseminationDateEl.value;
+      if (!date) return;
+
+      const exists = state.inseminations.some((entry) => entry.date === date);
+      if (!exists) {
+        state.inseminations.push({ date });
+      }
+
+      sortInseminations();
       saveState();
       render();
     });
@@ -450,27 +481,33 @@
 
     function loadState() {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return { temperatures: [], periods: [] };
+      if (!raw) return { temperatures: [], periods: [], inseminations: [] };
       try {
         const parsed = JSON.parse(raw);
         return {
           temperatures: Array.isArray(parsed.temperatures) ? parsed.temperatures : [],
-          periods: Array.isArray(parsed.periods) ? parsed.periods : []
+          periods: Array.isArray(parsed.periods) ? parsed.periods : [],
+          inseminations: Array.isArray(parsed.inseminations) ? parsed.inseminations : []
         };
       } catch {
-        return { temperatures: [], periods: [] };
+        return { temperatures: [], periods: [], inseminations: [] };
       }
     }
 
     function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
     function sortTemps() { state.temperatures.sort((a, b) => new Date(a.date) - new Date(b.date)); }
     function sortPeriods() { state.periods.sort((a, b) => new Date(b.start) - new Date(a.start)); }
+    function sortInseminations() { state.inseminations.sort((a, b) => new Date(a.date) - new Date(b.date)); }
     function isoToday() { return new Date().toISOString().slice(0, 10); }
     function isoFromDate(date) { return date.toISOString().slice(0, 10); }
 
     function formatDate(input) {
       const d = new Date(input + "T00:00:00");
       return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+    }
+    function formatShortDate(input) {
+      const d = new Date(input + "T00:00:00");
+      return d.toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "2-digit" });
     }
 
     function cToF(c) { return (c * 9 / 5) + 32; }
@@ -672,6 +709,64 @@
       });
     }
 
+    function renderInseminationsList() {
+      if (!state.inseminations.length) {
+        inseminationsListEl.innerHTML = "<p class='muted'>No insemination entries yet.</p>";
+        return;
+      }
+
+      const ordered = [...state.inseminations].reverse();
+      const grouped = groupByMonth(ordered, (entry) => entry.date);
+      const monthKeys = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
+      const byYear = groupMonthKeysByYear(monthKeys);
+      const yearKeys = Object.keys(byYear).sort((a, b) => b.localeCompare(a));
+
+      inseminationsListEl.innerHTML = yearKeys.map((yearKey, yearIdx) => {
+        const months = byYear[yearKey];
+        const yearCount = months.reduce((sum, monthKey) => sum + grouped[monthKey].length, 0);
+
+        const monthsHtml = months.map((monthKey, monthIdx) => {
+          const rows = grouped[monthKey].map((entry) => {
+            return `
+              <div class="entry">
+                <div><strong>Insemination: ${formatDate(entry.date)}</strong></div>
+                <button type="button" data-delete-insemination="${entry.date}">Delete</button>
+              </div>
+            `;
+          }).join("");
+
+          return `
+            <details class="month-group" ${yearIdx === 0 && monthIdx === 0 ? "open" : ""}>
+              <summary>
+                <span>${monthNameFromKey(monthKey)}</span>
+                <span class="count">${grouped[monthKey].length} entries</span>
+              </summary>
+              <div class="month-entries">${rows}</div>
+            </details>
+          `;
+        }).join("");
+
+        return `
+          <details class="year-group" ${yearIdx === 0 ? "open" : ""}>
+            <summary>
+              <span>${yearKey}</span>
+              <span class="count">${yearCount} entries</span>
+            </summary>
+            <div class="year-entries">${monthsHtml}</div>
+          </details>
+        `;
+      }).join("");
+
+      inseminationsListEl.querySelectorAll("[data-delete-insemination]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const date = btn.getAttribute("data-delete-insemination");
+          state.inseminations = state.inseminations.filter((entry) => entry.date !== date);
+          saveState();
+          render();
+        });
+      });
+    }
+
     function cycleInsights() {
       const starts = [...state.periods].map((p) => p.start).sort((a, b) => new Date(a) - new Date(b));
       if (starts.length < 2) return { averageCycle: null, nextPeriod: null, ovulationEstimate: null };
@@ -707,11 +802,11 @@
     }
 
     function renderChart() {
-      if (!state.temperatures.length && !state.periods.length) {
+      if (!state.temperatures.length && !state.periods.length && !state.inseminations.length) {
         chartEl.innerHTML = "";
         chartEl.style.width = "100%";
         chartInnerEl.style.width = "100%";
-        chartHintEl.textContent = "Add temperature or period entries to populate the chart.";
+        chartHintEl.textContent = "Add temperature, period, or insemination entries to populate the chart.";
         return;
       }
 
@@ -719,7 +814,8 @@
       const tempDates = chartData.map((t) => new Date(t.date));
       const periodStarts = state.periods.map((p) => new Date(p.start));
       const periodEnds = state.periods.map((p) => new Date(p.end));
-      const allDates = [...tempDates, ...periodStarts, ...periodEnds];
+      const inseminationDates = state.inseminations.map((entry) => new Date(entry.date));
+      const allDates = [...tempDates, ...periodStarts, ...periodEnds, ...inseminationDates];
       const maxDate = new Date(Math.max(...allDates.map((d) => d.getTime())));
       const rangeValue = selectedChartRange;
       const days = rangeValue === "all" ? null : Number(rangeValue);
@@ -732,11 +828,17 @@
         return d >= minDate && d <= maxRangeDate;
       });
 
-      if (!display.length && !state.periods.some((p) => new Date(p.end) >= minDate && new Date(p.start) <= maxRangeDate)) {
+      const hasPeriodInRange = state.periods.some((p) => new Date(p.end) >= minDate && new Date(p.start) <= maxRangeDate);
+      const hasInseminationInRange = state.inseminations.some((entry) => {
+        const d = new Date(entry.date);
+        return d >= minDate && d <= maxRangeDate;
+      });
+
+      if (!display.length && !hasPeriodInRange && !hasInseminationInRange) {
         chartEl.innerHTML = "";
         chartEl.style.width = "100%";
         chartInnerEl.style.width = "100%";
-        chartHintEl.textContent = "No temperature or period entries in this range.";
+        chartHintEl.textContent = "No temperature, period, or insemination entries in this range.";
         return;
       }
 
@@ -876,8 +978,23 @@
         return `<rect x="${x1}" y="${padT}" width="${Math.max(x2 - x1, 2)}" height="${innerH}" fill="#fde2e7" opacity="0.55"></rect>`;
       }).join("");
 
-      const tileW = 36;
-      const tileH = 22;
+      const inseminationMarkers = state.inseminations
+        .filter((entry) => {
+          const d = new Date(entry.date);
+          return d >= minXDate && d <= maxXDate;
+        })
+        .map((entry) => {
+          const x = xForDate(entry.date);
+          const yTop = padT + 4;
+          const yBottom = padT + innerH;
+          return `
+            <line x1="${x}" y1="${yTop + 7}" x2="${x}" y2="${yBottom}" stroke="#d97706" stroke-width="1.1" opacity="0.55" stroke-dasharray="4 4"></line>
+            <path d="M ${x - 5} ${yTop} L ${x + 5} ${yTop} L ${x} ${yTop + 8} Z" fill="#d97706" opacity="0.9"></path>
+          `;
+        }).join("");
+
+      const tileW = 50;
+      const tileH = 30;
       const connectorPath = display.map((d, i) => {
         const x = xForDate(d.date);
         const y = yForTemp(d.chartValue);
@@ -935,7 +1052,10 @@
             ${pinned ? `<circle cx="${centerX}" cy="${centerY}" r="5.2" fill="none" stroke="#ea580c" stroke-width="1.6"></circle>` : ""}
             <g class="value-label">
               <rect x="${x}" y="${y}" width="${tileW}" height="${tileH}" rx="6" fill="#0f766e" />
-              <text x="${x + (tileW / 2)}" y="${y + 14}" text-anchor="middle" font-size="9" font-weight="700" fill="#ffffff">${d.chartValue.toFixed(1)}</text>
+              <text x="${x + (tileW / 2)}" y="${y + 12}" text-anchor="middle" fill="#ffffff">
+                <tspan x="${x + (tileW / 2)}" font-size="9" font-weight="700">${d.chartValue.toFixed(1)}</tspan>
+                <tspan x="${x + (tileW / 2)}" dy="11" font-size="8" font-weight="500">${formatShortDate(d.date)}</tspan>
+              </text>
             </g>
           </g>
         `;
@@ -960,6 +1080,7 @@
         ${weekLines.join("")}
         ${monthLines}
         ${periodRects}
+        ${inseminationMarkers}
         ${display.length > 1 ? `<path d="${connectorPath}" fill="none" stroke="#5ea79f" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"></path>` : ""}
         ${pointMarks}
         ${monthNameLabels}
@@ -967,14 +1088,16 @@
         ${xLabels}
       `;
 
-      chartHintEl.textContent = "Month blocks plus weekly guides (W1-W5) segment each month. Month names are centered under each block. Pink areas show period days. Every day is shown as a dot. Hover dots to reveal values. Orange-ring dots mark top temperature days per month.";
+      chartHintEl.textContent = "Month blocks plus weekly guides (W1-W5) segment each month. Month names are centered under each block. Pink areas show period days. Gold markers show insemination dates. Every day is shown as a dot. Hover dots to reveal values. Orange-ring dots mark top temperature days per month.";
     }
 
     function render() {
       sortTemps();
       sortPeriods();
+      sortInseminations();
       renderTempsList();
       renderPeriodsList();
+      renderInseminationsList();
       renderChart();
       renderInsights();
     }
