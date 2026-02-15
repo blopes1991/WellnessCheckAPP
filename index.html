@@ -69,12 +69,47 @@
     button { border: 0; border-radius: 10px; padding: 10px 12px; cursor: pointer; font-weight: 600; }
     .btn-main { background: var(--accent); color: #fff; }
     .btn-light { background: var(--accent-soft); color: #0b443d; }
+    .btn-danger { background: #fee2e2; color: #9f1239; }
+    .btn-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
     .chart-wrap {
       width: 100%;
       overflow-x: auto;
       border: 1px solid var(--line);
       border-radius: 12px;
       background: #fcfffe;
+    }
+    .chart-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .chart-range-tabs {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+    .range-tab {
+      border: 1px solid var(--line);
+      background: #f3fbf8;
+      color: #21544e;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      line-height: 1;
+    }
+    .range-tab.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
     }
     #tempChart { width: 100%; min-height: 260px; display: block; }
     .insight-grid {
@@ -148,7 +183,14 @@
       font-size: 0.8rem;
       white-space: nowrap;
     }
-    @media (max-width: 640px) { .row { grid-template-columns: 1fr; } }
+    @media (max-width: 640px) {
+      .row { grid-template-columns: 1fr; }
+      .chart-header {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .chart-range-tabs { justify-content: flex-start; }
+    }
   </style>
 </head>
 <body>
@@ -182,7 +224,16 @@
       <p class="muted">Period ranges are highlighted on the chart.</p>
     </section>
     <section class="card">
-      <h2 class="section-title">Temperature Trend (Last 6 Months)</h2>
+      <div class="chart-header">
+        <h2 class="section-title" style="margin:0;">Temperature Trend</h2>
+        <div id="chartRangeTabs" class="chart-range-tabs" role="tablist" aria-label="Chart range">
+          <button type="button" class="range-tab" data-range="30">1M</button>
+          <button type="button" class="range-tab" data-range="90">3M</button>
+          <button type="button" class="range-tab active" data-range="183">6M</button>
+          <button type="button" class="range-tab" data-range="365">12M</button>
+          <button type="button" class="range-tab" data-range="all">All</button>
+        </div>
+      </div>
       <div class="chart-wrap"><svg id="tempChart" viewBox="0 0 800 280" preserveAspectRatio="none" aria-label="Basal temperature chart"></svg></div>
       <div id="chartHint" class="muted"></div>
       <div class="insight-grid" id="insightGrid"></div>
@@ -191,6 +242,11 @@
     <section class="card">
       <h3 class="section-title">Recent Entries</h3>
       <button id="exportBtn" type="button" class="btn-light">Export Data (JSON)</button>
+      <div class="btn-row">
+        <button id="demo3mBtn" type="button" class="btn-light">Add Demo 3 Months</button>
+        <button id="demo1yBtn" type="button" class="btn-light">Add Demo 1 Year</button>
+        <button id="clearDemoBtn" type="button" class="btn-danger">Clear Demo Data</button>
+      </div>
       <p class="list-title">Temperature Entries</p>
       <div class="list" id="tempsList"></div>
       <p class="list-title">Period Entries</p>
@@ -206,6 +262,9 @@
     const tempForm = document.getElementById("tempForm");
     const periodForm = document.getElementById("periodForm");
     const exportBtn = document.getElementById("exportBtn");
+    const demo3mBtn = document.getElementById("demo3mBtn");
+    const demo1yBtn = document.getElementById("demo1yBtn");
+    const clearDemoBtn = document.getElementById("clearDemoBtn");
 
     const tempDateEl = document.getElementById("tempDate");
     const tempValueEl = document.getElementById("tempValue");
@@ -216,8 +275,10 @@
     const tempsListEl = document.getElementById("tempsList");
     const periodsListEl = document.getElementById("periodsList");
     const chartEl = document.getElementById("tempChart");
+    const chartRangeTabsEl = document.getElementById("chartRangeTabs");
     const chartHintEl = document.getElementById("chartHint");
     const insightGridEl = document.getElementById("insightGrid");
+    let selectedChartRange = "183";
 
     tempDateEl.value = isoToday();
     periodStartEl.value = isoToday();
@@ -272,6 +333,37 @@
       URL.revokeObjectURL(link.href);
     });
 
+    chartRangeTabsEl.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-range]");
+      if (!button) return;
+      selectedChartRange = button.getAttribute("data-range");
+      chartRangeTabsEl.querySelectorAll(".range-tab").forEach((tab) => {
+        tab.classList.toggle("active", tab === button);
+      });
+      renderChart();
+    });
+
+    demo3mBtn.addEventListener("click", () => {
+      addDemoTemperatures(90);
+    });
+
+    demo1yBtn.addEventListener("click", () => {
+      addDemoTemperatures(365);
+    });
+
+    clearDemoBtn.addEventListener("click", () => {
+      const before = state.temperatures.length;
+      state.temperatures = state.temperatures.filter((entry) => !entry.isDemo);
+      const removed = before - state.temperatures.length;
+      if (removed === 0) {
+        alert("No demo temperature entries found.");
+        return;
+      }
+      saveState();
+      render();
+      alert(`Removed ${removed} demo temperature entries.`);
+    });
+
     function loadState() {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return { temperatures: [], periods: [] };
@@ -290,6 +382,7 @@
     function sortTemps() { state.temperatures.sort((a, b) => new Date(a.date) - new Date(b.date)); }
     function sortPeriods() { state.periods.sort((a, b) => new Date(b.start) - new Date(a.start)); }
     function isoToday() { return new Date().toISOString().slice(0, 10); }
+    function isoFromDate(date) { return date.toISOString().slice(0, 10); }
 
     function formatDate(input) {
       const d = new Date(input + "T00:00:00");
@@ -300,6 +393,33 @@
     function toFahrenheit(entry) { return entry.unit === "C" ? cToF(entry.value) : entry.value; }
     function normalizeChartTemps(entries) {
       return entries.map((t) => ({ ...t, chartValue: toFahrenheit(t) }));
+    }
+
+    function addDemoTemperatures(days) {
+      const today = new Date();
+      const seen = new Set(state.temperatures.map((entry) => entry.date));
+
+      for (let i = days - 1; i >= 0; i -= 1) {
+        const d = new Date(today);
+        d.setDate(today.getDate() - i);
+        const iso = isoFromDate(d);
+        if (seen.has(iso)) continue;
+
+        const base = 92.5 + Math.sin((days - i) / 8) * 1.2;
+        const noise = (Math.random() - 0.5) * 0.8;
+        const value = Math.max(90, Math.min(95, base + noise));
+        state.temperatures.push({
+          date: iso,
+          value: Number(value.toFixed(2)),
+          unit: "F",
+          isDemo: true
+        });
+      }
+
+      sortTemps();
+      saveState();
+      render();
+      alert(`Added demo temperatures for up to ${days} days (90-95 F).`);
     }
 
     function monthKeyFromISO(isoDate) {
@@ -440,29 +560,30 @@
     function renderChart() {
       if (!state.temperatures.length) {
         chartEl.innerHTML = "";
+        chartEl.style.width = "100%";
         chartHintEl.textContent = "Add temperature entries to see your trend line.";
         return;
       }
 
       const chartData = normalizeChartTemps(state.temperatures);
       const maxDate = new Date(chartData[chartData.length - 1].date);
-      const minDate = new Date(maxDate.getTime() - 183 * DAY_MS);
+      const rangeValue = selectedChartRange;
+      const days = rangeValue === "all" ? null : Number(rangeValue);
+      const minDate = days ? new Date(maxDate.getTime() - days * DAY_MS) : new Date(chartData[0].date);
       const display = chartData.filter((t) => new Date(t.date) >= minDate);
 
-      if (display.length < 2) {
+      if (display.length < 1) {
         chartEl.innerHTML = "";
-        chartHintEl.textContent = "Add at least 2 temperature entries to draw the trend.";
+        chartEl.style.width = "100%";
+        chartHintEl.textContent = "No temperature entries in this range.";
         return;
       }
 
-      const width = 800;
       const height = 280;
       const padL = 42;
       const padR = 14;
       const padT = 14;
       const padB = 28;
-      const innerW = width - padL - padR;
-      const innerH = height - padT - padB;
 
       const minTemp = Math.min(...display.map((d) => d.chartValue));
       const maxTemp = Math.max(...display.map((d) => d.chartValue));
@@ -472,6 +593,15 @@
       const minXDate = new Date(display[0].date);
       const maxXDate = new Date(display[display.length - 1].date);
       const dateSpan = Math.max((maxXDate - minXDate) / DAY_MS, 1);
+      const pxPerDay = 14;
+      const dynamicInnerW = dateSpan * pxPerDay;
+      const innerW = Math.max(744, dynamicInnerW);
+      const width = padL + padR + innerW;
+      const innerH = height - padT - padB;
+
+      chartEl.setAttribute("viewBox", `0 0 ${width} ${height}`);
+      chartEl.style.width = `${width}px`;
+      chartEl.style.height = `${height}px`;
 
       const xForDate = (iso) => {
         const d = new Date(iso);
@@ -483,12 +613,6 @@
         const t = (val - yMin) / (yMax - yMin);
         return padT + (1 - t) * innerH;
       };
-
-      const dPath = display.map((d, i) => {
-        const x = xForDate(d.date);
-        const y = yForTemp(d.chartValue);
-        return `${i === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
-      }).join(" ");
 
       const ticks = 5;
       const yGrid = Array.from({ length: ticks }, (_, i) => {
@@ -513,7 +637,27 @@
         return `<rect x="${x1}" y="${padT}" width="${Math.max(x2 - x1, 2)}" height="${innerH}" fill="#fde2e7" opacity="0.55"></rect>`;
       }).join("");
 
-      const dots = display.map((d) => `<circle cx="${xForDate(d.date)}" cy="${yForTemp(d.chartValue)}" r="3.3" fill="#156f63"></circle>`).join("");
+      const tileW = 36;
+      const tileH = 22;
+      const connectorPath = display.map((d, i) => {
+        const x = xForDate(d.date);
+        const y = yForTemp(d.chartValue);
+        return `${i === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
+      }).join(" ");
+
+      const valueTiles = display.map((d) => {
+        const centerX = xForDate(d.date);
+        const centerY = yForTemp(d.chartValue);
+        const x = Math.max(padL, Math.min(width - padR - tileW, centerX - (tileW / 2)));
+        const y = Math.max(padT, Math.min(padT + innerH - tileH, centerY - (tileH / 2)));
+        return `
+          <g>
+            <rect x="${x}" y="${y}" width="${tileW}" height="${tileH}" rx="6" fill="#0f766e" />
+            <text x="${x + (tileW / 2)}" y="${y + 14}" text-anchor="middle" font-size="9" font-weight="700" fill="#ffffff">${d.chartValue.toFixed(1)}</text>
+          </g>
+        `;
+      }).join("");
+
       const xLabels = [display[0], display[Math.floor(display.length / 2)], display[display.length - 1]].map((d) => {
         return `<text x="${xForDate(d.date)}" y="${height - 8}" text-anchor="middle" font-size="10" fill="#5f7f7b">${new Date(d.date).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</text>`;
       }).join("");
@@ -522,12 +666,12 @@
         <rect x="0" y="0" width="${width}" height="${height}" fill="#fcfffe"></rect>
         ${yGrid}
         ${periodRects}
-        <path d="${dPath}" fill="none" stroke="#156f63" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"></path>
-        ${dots}
+        <path d="${connectorPath}" fill="none" stroke="#5ea79f" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"></path>
+        ${valueTiles}
         ${xLabels}
       `;
 
-      chartHintEl.textContent = "Pink areas show period days. Trend line uses Fahrenheit for one consistent scale.";
+      chartHintEl.textContent = "Pink areas show period days. Squares show temperature values in Fahrenheit. Scroll horizontally to view long ranges.";
     }
 
     function render() {
@@ -543,6 +687,19 @@
 
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
+        const isLocalDev = location.protocol !== "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1";
+
+        if (isLocalDev) {
+          navigator.serviceWorker.getRegistrations().then((registrations) => {
+            registrations.forEach((registration) => registration.unregister());
+          });
+
+          if ("caches" in window) {
+            caches.keys().then((keys) => Promise.all(keys.map((key) => caches.delete(key))));
+          }
+          return;
+        }
+
         navigator.serviceWorker.register("service-worker.js").catch(() => {
           // Silent failure is acceptable for local development.
         });
