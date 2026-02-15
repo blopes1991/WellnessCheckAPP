@@ -93,7 +93,43 @@
     }
     .insight .v { font-weight: 700; font-size: 0.95rem; }
     .muted { color: var(--muted); font-size: 0.85rem; margin-top: 8px; }
-    .list { margin-top: 10px; display: grid; gap: 6px; }
+    .list { margin-top: 10px; display: grid; gap: 8px; }
+    .list-title {
+      margin-top: 12px;
+      margin-bottom: 6px;
+      font-size: 0.9rem;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .month-group {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fbfffd;
+      overflow: hidden;
+    }
+    .month-group summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 10px 12px;
+      font-weight: 600;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      background: #f1f8f5;
+      color: #1d4a45;
+    }
+    .month-group summary::-webkit-details-marker { display: none; }
+    .month-group .count {
+      font-size: 0.78rem;
+      color: var(--muted);
+      font-weight: 500;
+    }
+    .month-group .month-entries {
+      padding: 8px;
+      display: grid;
+      gap: 6px;
+    }
     .entry {
       border: 1px solid var(--line);
       border-radius: 10px;
@@ -155,7 +191,9 @@
     <section class="card">
       <h3 class="section-title">Recent Entries</h3>
       <button id="exportBtn" type="button" class="btn-light">Export Data (JSON)</button>
+      <p class="list-title">Temperature Entries</p>
       <div class="list" id="tempsList"></div>
+      <p class="list-title">Period Entries</p>
       <div class="list" id="periodsList"></div>
     </section>
   </main>
@@ -264,19 +302,53 @@
       return entries.map((t) => ({ ...t, chartValue: toFahrenheit(t) }));
     }
 
+    function monthKeyFromISO(isoDate) {
+      return isoDate.slice(0, 7);
+    }
+
+    function monthLabelFromKey(monthKey) {
+      const d = new Date(`${monthKey}-01T00:00:00`);
+      return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+    }
+
+    function groupByMonth(entries, getDateISO) {
+      const groups = {};
+      entries.forEach((entry) => {
+        const key = monthKeyFromISO(getDateISO(entry));
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(entry);
+      });
+      return groups;
+    }
+
     function renderTempsList() {
       if (!state.temperatures.length) {
         tempsListEl.innerHTML = "<p class='muted'>No temperature entries yet.</p>";
         return;
       }
 
-      const latest = [...state.temperatures].slice(-20).reverse();
-      tempsListEl.innerHTML = latest.map((entry) => `
-        <div class="entry">
-          <div><strong>${entry.value.toFixed(2)} ${entry.unit}</strong><small>${formatDate(entry.date)}</small></div>
-          <button type="button" data-delete-temp="${entry.date}">Delete</button>
-        </div>
-      `).join("");
+      const ordered = [...state.temperatures].reverse();
+      const grouped = groupByMonth(ordered, (entry) => entry.date);
+      const monthKeys = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
+
+      tempsListEl.innerHTML = monthKeys.map((monthKey, idx) => {
+        const rows = grouped[monthKey].map((entry) => `
+          <div class="entry">
+            <div><strong>${entry.value.toFixed(2)} ${entry.unit}</strong><small>${formatDate(entry.date)}</small></div>
+            <button type="button" data-delete-temp="${entry.date}">Delete</button>
+          </div>
+        `).join("");
+
+        return `
+          <details class="month-group" ${idx === 0 ? "open" : ""}>
+            <summary>
+              <span>${monthLabelFromKey(monthKey)}</span>
+              <span class="count">${grouped[monthKey].length} entries</span>
+            </summary>
+            <div class="month-entries">${rows}</div>
+          </details>
+        `;
+      }).join("");
 
       tempsListEl.querySelectorAll("[data-delete-temp]").forEach((btn) => {
         btn.addEventListener("click", () => {
@@ -294,18 +366,37 @@
         return;
       }
 
-      const latest = [...state.periods].slice(0, 20);
-      periodsListEl.innerHTML = latest.map((entry, idx) => `
-        <div class="entry">
-          <div><strong>Period: ${formatDate(entry.start)} - ${formatDate(entry.end)}</strong></div>
-          <button type="button" data-delete-period="${idx}">Delete</button>
-        </div>
-      `).join("");
+      const ordered = [...state.periods];
+      const grouped = groupByMonth(ordered, (entry) => entry.start);
+      const monthKeys = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
+
+      periodsListEl.innerHTML = monthKeys.map((monthKey, idx) => {
+        const rows = grouped[monthKey].map((entry) => {
+          const id = `${entry.start}|${entry.end}`;
+          return `
+            <div class="entry">
+              <div><strong>Period: ${formatDate(entry.start)} - ${formatDate(entry.end)}</strong></div>
+              <button type="button" data-delete-period="${id}">Delete</button>
+            </div>
+          `;
+        }).join("");
+
+        return `
+          <details class="month-group" ${idx === 0 ? "open" : ""}>
+            <summary>
+              <span>${monthLabelFromKey(monthKey)}</span>
+              <span class="count">${grouped[monthKey].length} entries</span>
+            </summary>
+            <div class="month-entries">${rows}</div>
+          </details>
+        `;
+      }).join("");
 
       periodsListEl.querySelectorAll("[data-delete-period]").forEach((btn) => {
         btn.addEventListener("click", () => {
-          const idx = Number(btn.getAttribute("data-delete-period"));
-          state.periods.splice(idx, 1);
+          const id = btn.getAttribute("data-delete-period");
+          const [start, end] = id.split("|");
+          state.periods = state.periods.filter((p) => !(p.start === start && p.end === end));
           saveState();
           render();
         });
