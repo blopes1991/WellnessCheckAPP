@@ -130,6 +130,30 @@
       grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
       margin-top: 10px;
     }
+    .insight-head {
+      margin-top: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .btn-info {
+      background: #e8f4f1;
+      color: #1f5b54;
+      border: 1px solid #bddad2;
+      padding: 6px 10px;
+      font-size: 0.8rem;
+    }
+    .info-panel {
+      margin-top: 8px;
+      border: 1px solid var(--line);
+      background: #f8fcfb;
+      border-radius: 10px;
+      padding: 10px;
+      font-size: 0.82rem;
+      color: #2f4f4b;
+    }
+    .info-panel[hidden] { display: none; }
     .insight { background: #f7fbf9; border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
     .insight .k {
       color: var(--muted);
@@ -248,6 +272,22 @@
       </div>
       <div class="chart-wrap"><div id="chartInner" class="chart-inner"><svg id="tempChart" viewBox="0 0 800 280" preserveAspectRatio="none" aria-label="Basal temperature chart"></svg></div></div>
       <div id="chartHint" class="muted"></div>
+      <div class="insight-head">
+        <h3 style="margin:0;font-size:0.95rem;color:#355f59;">Insight Calculations</h3>
+        <button id="insightInfoBtn" type="button" class="btn-info">Info</button>
+      </div>
+      <div id="insightInfoPanel" class="info-panel" hidden>
+        <strong><u>How to read these insights</u></strong><br>
+        <br>
+        <strong>Last Temp:</strong> Your most recent basal temperature entry.<br>
+        <strong>Average Cycle:</strong> The average number of days between your period start dates.<br>
+        <strong>Next Period (Estimate):</strong> A predicted date based on your average cycle length.<br>
+        <strong>Ovulation Estimate:</strong> Estimated as about 14 days before your predicted next period, based on a common luteal-phase pattern.<br>
+        <br>
+        <strong>What this does not use:</strong> This estimate does not currently use cervical mucus, LH tests, or symptom tracking, and it does not medically confirm ovulation from temperature alone.<br>
+        <br>
+        <strong>Important:</strong> This is a guidance tool, not medical advice or a diagnosis.
+      </div>
       <div class="insight-grid" id="insightGrid"></div>
       <p class="muted">Ovulation estimate is based on average cycle length and should not be treated as medical advice.</p>
     </section>
@@ -269,6 +309,7 @@
   <script>
     const STORAGE_KEY = "wellness-check-v1";
     const DAY_MS = 24 * 60 * 60 * 1000;
+    const DEMO_START_DATE = "2026-02-15";
     const state = loadState();
 
     const tempForm = document.getElementById("tempForm");
@@ -291,6 +332,8 @@
     const chartRangeTabsEl = document.getElementById("chartRangeTabs");
     const chartHintEl = document.getElementById("chartHint");
     const insightGridEl = document.getElementById("insightGrid");
+    const insightInfoBtn = document.getElementById("insightInfoBtn");
+    const insightInfoPanel = document.getElementById("insightInfoPanel");
     let selectedChartRange = "183";
 
     tempDateEl.value = isoToday();
@@ -356,6 +399,10 @@
       renderChart();
     });
 
+    insightInfoBtn.addEventListener("click", () => {
+      insightInfoPanel.hidden = !insightInfoPanel.hidden;
+    });
+
     demo3mBtn.addEventListener("click", () => {
       addDemoTemperatures(90);
     });
@@ -409,18 +456,34 @@
     }
 
     function addDemoTemperatures(days) {
-      const today = new Date();
+      const start = new Date(`${DEMO_START_DATE}T00:00:00`);
       const seen = new Set(state.temperatures.map((entry) => entry.date));
+      const monthPeakWeek = {};
 
-      for (let i = days - 1; i >= 0; i -= 1) {
-        const d = new Date(today);
-        d.setDate(today.getDate() - i);
+      for (let i = 0; i < days; i += 1) {
+        const d = new Date(start);
+        d.setDate(start.getDate() + i);
         const iso = isoFromDate(d);
         if (seen.has(iso)) continue;
 
-        const base = 92.5 + Math.sin((days - i) / 8) * 1.2;
-        const noise = (Math.random() - 0.5) * 0.8;
-        const value = Math.max(90, Math.min(95, base + noise));
+        const monthKey = iso.slice(0, 7);
+        if (monthPeakWeek[monthKey] === undefined) {
+          const monthSeed = d.getFullYear() * 12 + d.getMonth();
+          monthPeakWeek[monthKey] = monthSeed % 4; // Choose one of weeks 1-4 for this month.
+        }
+
+        const dayOfMonth = d.getDate();
+        const weekOfMonth = Math.floor((dayOfMonth - 1) / 7);
+        const isPeakWeek = weekOfMonth === monthPeakWeek[monthKey];
+
+        let value;
+        if (isPeakWeek) {
+          value = 98 + (Math.random() * 1.0); // 98.00 to 99.00
+        } else {
+          value = 96.8 + (Math.random() * 1.2); // 96.80 to 98.00
+          value = Math.min(value, 98);
+        }
+
         state.temperatures.push({
           date: iso,
           value: Number(value.toFixed(2)),
@@ -432,7 +495,7 @@
       sortTemps();
       saveState();
       render();
-      alert(`Added demo temperatures for up to ${days} days (90-95 F).`);
+      alert(`Added demo temperatures for up to ${days} days starting ${DEMO_START_DATE} (one 98-99 F week per month, other weeks 98 F or below).`);
     }
 
     function monthKeyFromISO(isoDate) {
@@ -571,26 +634,36 @@
     }
 
     function renderChart() {
-      if (!state.temperatures.length) {
+      if (!state.temperatures.length && !state.periods.length) {
         chartEl.innerHTML = "";
         chartEl.style.width = "100%";
         chartInnerEl.style.width = "100%";
-        chartHintEl.textContent = "Add temperature entries to see your trend line.";
+        chartHintEl.textContent = "Add temperature or period entries to populate the chart.";
         return;
       }
 
       const chartData = normalizeChartTemps(state.temperatures);
-      const maxDate = new Date(chartData[chartData.length - 1].date);
+      const tempDates = chartData.map((t) => new Date(t.date));
+      const periodStarts = state.periods.map((p) => new Date(p.start));
+      const periodEnds = state.periods.map((p) => new Date(p.end));
+      const allDates = [...tempDates, ...periodStarts, ...periodEnds];
+      const maxDate = new Date(Math.max(...allDates.map((d) => d.getTime())));
       const rangeValue = selectedChartRange;
       const days = rangeValue === "all" ? null : Number(rangeValue);
-      const minDate = days ? new Date(maxDate.getTime() - days * DAY_MS) : new Date(chartData[0].date);
-      const display = chartData.filter((t) => new Date(t.date) >= minDate);
+      const minDate = days
+        ? new Date(maxDate.getTime() - days * DAY_MS)
+        : new Date(Math.min(...allDates.map((d) => d.getTime())));
+      const maxRangeDate = maxDate;
+      const display = chartData.filter((t) => {
+        const d = new Date(t.date);
+        return d >= minDate && d <= maxRangeDate;
+      });
 
-      if (display.length < 1) {
+      if (!display.length && !state.periods.some((p) => new Date(p.end) >= minDate && new Date(p.start) <= maxRangeDate)) {
         chartEl.innerHTML = "";
         chartEl.style.width = "100%";
         chartInnerEl.style.width = "100%";
-        chartHintEl.textContent = "No temperature entries in this range.";
+        chartHintEl.textContent = "No temperature or period entries in this range.";
         return;
       }
 
@@ -605,8 +678,8 @@
       const yMin = minTemp - 0.15;
       const yMax = maxTemp + 0.15;
 
-      const minXDate = new Date(display[0].date);
-      const maxXDate = new Date(display[display.length - 1].date);
+      const minXDate = minDate;
+      const maxXDate = maxRangeDate;
       const dateSpan = Math.max((maxXDate - minXDate) / DAY_MS, 1);
       const pxPerDay = 14;
       const dynamicInnerW = dateSpan * pxPerDay;
@@ -665,6 +738,59 @@
         return `<line x1="${x}" y1="${padT}" x2="${x}" y2="${padT + innerH}" stroke="#cbded8" stroke-width="1.2" opacity="0.95"></line>`;
       }).join("");
 
+      const monthNameLabels = monthEdges.slice(0, -1).map((edgeStart, idx) => {
+        const edgeEnd = monthEdges[idx + 1];
+        const x1 = xForDate(edgeStart.toISOString().slice(0, 10));
+        const x2 = xForDate(edgeEnd.toISOString().slice(0, 10));
+        const widthPx = x2 - x1;
+        if (widthPx < 44) return "";
+        const centerX = x1 + (widthPx / 2);
+        const label = edgeStart.toLocaleDateString(undefined, { month: "short", year: "numeric" });
+        return `<text x="${centerX}" y="${height - 19}" text-anchor="middle" font-size="9" font-weight="600" fill="#3f6560">${label}</text>`;
+      }).join("");
+
+      const weekBands = [];
+      const weekLines = [];
+      const weekLabels = [];
+      monthEdges.slice(0, -1).forEach((edgeStart, monthIndex) => {
+        const edgeEnd = monthEdges[monthIndex + 1];
+        const monthStart = new Date(edgeStart.getFullYear(), edgeStart.getMonth(), 1);
+
+        // Fixed monthly week anchors so each full month maps to W1..W5 consistently.
+        const anchors = [1, 8, 15, 22, 29, 36].map((day) => {
+          const d = new Date(monthStart);
+          d.setDate(day);
+          return d;
+        });
+
+        for (let i = 0; i < 5; i += 1) {
+          const rawStart = anchors[i];
+          const rawEnd = anchors[i + 1];
+          const segStart = rawStart < edgeStart ? edgeStart : rawStart;
+          const segEnd = rawEnd > edgeEnd ? edgeEnd : rawEnd;
+          if (segEnd <= segStart) continue;
+
+          const x1 = xForDate(segStart.toISOString().slice(0, 10));
+          const x2 = xForDate(segEnd.toISOString().slice(0, 10));
+          const widthPx = Math.max(x2 - x1, 1);
+
+          if (widthPx > 12 && i % 2 === 0) {
+            weekBands.push(`<rect x="${x1}" y="${padT}" width="${widthPx}" height="${innerH}" fill="#ffffff" opacity="0.22"></rect>`);
+          }
+          if (i > 0) {
+            const lineX = xForDate((rawStart < edgeStart ? edgeStart : rawStart).toISOString().slice(0, 10));
+            weekLines.push(`<line x1="${lineX}" y1="${padT}" x2="${lineX}" y2="${padT + innerH}" stroke="#d7e6e1" stroke-width="1" opacity="0.9" stroke-dasharray="3 3"></line>`);
+          }
+
+          if (widthPx > 18) {
+            const weekLabel = `W${i + 1}`;
+            const centerX = x1 + (widthPx / 2);
+            const y = padT + innerH - 4;
+            weekLabels.push(`<text x="${centerX}" y="${y}" text-anchor="middle" font-size="8" fill="#6f8c88">${weekLabel}</text>`);
+          }
+        }
+      });
+
       const periodRects = state.periods.map((p) => {
         const start = new Date(p.start);
         const end = new Date(p.end);
@@ -685,15 +811,40 @@
         return `${i === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
       }).join(" ");
 
-      const monthlyExtremes = {};
+      const monthlyEntries = {};
       display.forEach((d) => {
         const monthKey = d.date.slice(0, 7);
-        if (!monthlyExtremes[monthKey]) {
-          monthlyExtremes[monthKey] = { min: d.chartValue, max: d.chartValue };
-          return;
+        if (!monthlyEntries[monthKey]) monthlyEntries[monthKey] = [];
+        monthlyEntries[monthKey].push(d);
+      });
+
+      const monthlyTopDates = {};
+      Object.keys(monthlyEntries).forEach((monthKey) => {
+        const top = [...monthlyEntries[monthKey]]
+          .sort((a, b) => {
+            if (b.chartValue !== a.chartValue) return b.chartValue - a.chartValue;
+            return new Date(a.date) - new Date(b.date);
+          })
+          .slice(0, 7);
+
+        const minPinnedSpacingPx = tileW + 8;
+        const maxPinnedPerMonth = 3;
+        const pinned = [];
+
+        top.forEach((entry) => {
+          if (pinned.length >= maxPinnedPerMonth) return;
+          const x = xForDate(entry.date);
+          const overlaps = pinned.some((kept) => Math.abs(kept.x - x) < minPinnedSpacingPx);
+          if (!overlaps) {
+            pinned.push({ date: entry.date, x });
+          }
+        });
+
+        if (!pinned.length && top.length) {
+          pinned.push({ date: top[0].date, x: xForDate(top[0].date) });
         }
-        monthlyExtremes[monthKey].min = Math.min(monthlyExtremes[monthKey].min, d.chartValue);
-        monthlyExtremes[monthKey].max = Math.max(monthlyExtremes[monthKey].max, d.chartValue);
+
+        monthlyTopDates[monthKey] = new Set(pinned.map((entry) => entry.date));
       });
 
       const pointMarks = display.map((d) => {
@@ -702,13 +853,13 @@
         const x = Math.max(padL, Math.min(width - padR - tileW, centerX - (tileW / 2)));
         const y = Math.max(padT, Math.min(padT + innerH - tileH, centerY - tileH - 6));
         const monthKey = d.date.slice(0, 7);
-        const extremes = monthlyExtremes[monthKey];
-        const pinned = Math.abs(d.chartValue - extremes.max) < 0.001 || Math.abs(d.chartValue - extremes.min) < 0.001;
+        const pinned = monthlyTopDates[monthKey].has(d.date);
         const pinnedClass = pinned ? " pinned" : "";
 
         return `
           <g class="point${pinnedClass}">
             <circle cx="${centerX}" cy="${centerY}" r="3.2" fill="#0f766e"></circle>
+            ${pinned ? `<circle cx="${centerX}" cy="${centerY}" r="5.2" fill="none" stroke="#ea580c" stroke-width="1.6"></circle>` : ""}
             <g class="value-label">
               <rect x="${x}" y="${y}" width="${tileW}" height="${tileH}" rx="6" fill="#0f766e" />
               <text x="${x + (tileW / 2)}" y="${y + 14}" text-anchor="middle" font-size="9" font-weight="700" fill="#ffffff">${d.chartValue.toFixed(1)}</text>
@@ -717,8 +868,10 @@
         `;
       }).join("");
 
-      const xLabels = [display[0], display[Math.floor(display.length / 2)], display[display.length - 1]].map((d) => {
-        return `<text x="${xForDate(d.date)}" y="${height - 8}" text-anchor="middle" font-size="10" fill="#5f7f7b">${new Date(d.date).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</text>`;
+      const labelDates = [minXDate, new Date((minXDate.getTime() + maxXDate.getTime()) / 2), maxXDate];
+      const xLabels = labelDates.map((d) => {
+        const iso = d.toISOString().slice(0, 10);
+        return `<text x="${xForDate(iso)}" y="${height - 8}" text-anchor="middle" font-size="10" fill="#5f7f7b">${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</text>`;
       }).join("");
 
       chartEl.innerHTML = `
@@ -729,15 +882,19 @@
         </style>
         <rect x="0" y="0" width="${width}" height="${height}" fill="#fcfffe"></rect>
         ${monthBands}
+        ${weekBands.join("")}
         ${yGrid}
+        ${weekLines.join("")}
         ${monthLines}
         ${periodRects}
-        <path d="${connectorPath}" fill="none" stroke="#5ea79f" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"></path>
+        ${display.length > 1 ? `<path d="${connectorPath}" fill="none" stroke="#5ea79f" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"></path>` : ""}
         ${pointMarks}
+        ${monthNameLabels}
+        ${weekLabels.join("")}
         ${xLabels}
       `;
 
-      chartHintEl.textContent = "Alternating month blocks and vertical lines mark each month. Pink areas show period days. Hover dots to reveal values. Monthly high/low values stay visible.";
+      chartHintEl.textContent = "Month blocks plus weekly guides (W1-W5) segment each month. Month names are centered under each block. Pink areas show period days. Every day is shown as a dot. Hover dots to reveal values. Orange-ring dots mark top temperature days per month.";
     }
 
     function render() {
