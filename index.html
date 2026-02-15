@@ -73,12 +73,6 @@
     .btn-main { background: var(--accent); color: #fff; }
     .btn-light { background: var(--accent-soft); color: #0b443d; }
     .btn-danger { background: #fee2e2; color: #9f1239; }
-    .btn-row {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      margin-top: 10px;
-    }
     .chart-wrap {
       width: 100%;
       min-width: 0;
@@ -389,11 +383,6 @@
     <section class="card">
       <h3 class="section-title">Recent Entries</h3>
       <button id="exportBtn" type="button" class="btn-light">Export Data (JSON)</button>
-      <div class="btn-row">
-        <button id="demo3mBtn" type="button" class="btn-light">Add Demo 3 Months</button>
-        <button id="demo1yBtn" type="button" class="btn-light">Add Demo 1 Year</button>
-        <button id="clearDemoBtn" type="button" class="btn-danger">Clear Demo Data</button>
-      </div>
       <p class="list-title">Temperature Entries</p>
       <div class="list" id="tempsList"></div>
       <p class="list-title">Period Entries</p>
@@ -406,15 +395,11 @@
   <script>
     const STORAGE_KEY = "wellness-check-v1";
     const DAY_MS = 24 * 60 * 60 * 1000;
-    const DEMO_START_DATE = "2026-02-15";
     const state = loadState();
 
     const tempForm = document.getElementById("tempForm");
     const inseminationForm = document.getElementById("inseminationForm");
     const exportBtn = document.getElementById("exportBtn");
-    const demo3mBtn = document.getElementById("demo3mBtn");
-    const demo1yBtn = document.getElementById("demo1yBtn");
-    const clearDemoBtn = document.getElementById("clearDemoBtn");
 
     const tempDateEl = document.getElementById("tempDate");
     const tempValueEl = document.getElementById("tempValue");
@@ -561,27 +546,6 @@
       inseminationInfoPanel.hidden = !inseminationInfoPanel.hidden;
     });
 
-    demo3mBtn.addEventListener("click", () => {
-      addDemoTemperatures(90);
-    });
-
-    demo1yBtn.addEventListener("click", () => {
-      addDemoTemperatures(365);
-    });
-
-    clearDemoBtn.addEventListener("click", () => {
-      const before = state.temperatures.length;
-      state.temperatures = state.temperatures.filter((entry) => !entry.isDemo);
-      const removed = before - state.temperatures.length;
-      if (removed === 0) {
-        alert("No demo temperature entries found.");
-        return;
-      }
-      saveState();
-      render();
-      alert(`Removed ${removed} demo temperature entries.`);
-    });
-
     function loadState() {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return { temperatures: [], periods: [], inseminations: [], periodDraftStart: null };
@@ -603,7 +567,6 @@
     function sortPeriods() { state.periods.sort((a, b) => new Date(b.start) - new Date(a.start)); }
     function sortInseminations() { state.inseminations.sort((a, b) => new Date(a.date) - new Date(b.date)); }
     function isoToday() { return new Date().toISOString().slice(0, 10); }
-    function isoFromDate(date) { return date.toISOString().slice(0, 10); }
 
     function formatDate(input) {
       const d = new Date(input + "T00:00:00");
@@ -618,49 +581,6 @@
     function toFahrenheit(entry) { return entry.unit === "C" ? cToF(entry.value) : entry.value; }
     function normalizeChartTemps(entries) {
       return entries.map((t) => ({ ...t, chartValue: toFahrenheit(t) }));
-    }
-
-    function addDemoTemperatures(days) {
-      const start = new Date(`${DEMO_START_DATE}T00:00:00`);
-      const seen = new Set(state.temperatures.map((entry) => entry.date));
-      const monthPeakWeek = {};
-
-      for (let i = 0; i < days; i += 1) {
-        const d = new Date(start);
-        d.setDate(start.getDate() + i);
-        const iso = isoFromDate(d);
-        if (seen.has(iso)) continue;
-
-        const monthKey = iso.slice(0, 7);
-        if (monthPeakWeek[monthKey] === undefined) {
-          const monthSeed = d.getFullYear() * 12 + d.getMonth();
-          monthPeakWeek[monthKey] = monthSeed % 4; // Choose one of weeks 1-4 for this month.
-        }
-
-        const dayOfMonth = d.getDate();
-        const weekOfMonth = Math.floor((dayOfMonth - 1) / 7);
-        const isPeakWeek = weekOfMonth === monthPeakWeek[monthKey];
-
-        let value;
-        if (isPeakWeek) {
-          value = 98 + (Math.random() * 1.0); // 98.00 to 99.00
-        } else {
-          value = 96.8 + (Math.random() * 1.2); // 96.80 to 98.00
-          value = Math.min(value, 98);
-        }
-
-        state.temperatures.push({
-          date: iso,
-          value: Number(value.toFixed(2)),
-          unit: "F",
-          isDemo: true
-        });
-      }
-
-      sortTemps();
-      saveState();
-      render();
-      alert(`Added demo temperatures for up to ${days} days starting ${DEMO_START_DATE} (one 98-99 F week per month, other weeks 98 F or below).`);
     }
 
     function monthKeyFromISO(isoDate) {
@@ -963,6 +883,7 @@
       const padR = 14;
       const padT = 14;
       const padB = 28;
+      const innerH = height - padT - padB;
 
       const minTemp = Math.min(...display.map((d) => d.chartValue));
       const maxTemp = Math.max(...display.map((d) => d.chartValue));
@@ -976,7 +897,6 @@
       const dynamicInnerW = dateSpan * pxPerDay;
       const innerW = Math.max(744, dynamicInnerW);
       const width = padL + padR + innerW;
-      const innerH = height - padT - padB;
 
       chartEl.setAttribute("viewBox", `0 0 ${width} ${height}`);
       chartInnerEl.style.width = `${width}px`;
