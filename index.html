@@ -1,11 +1,22 @@
 <!doctype html>
 <html lang="en">
 <head>
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#ffffff" />
+
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>My App</title>
 </head>
 <body>
+  <script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("./service-worker.js");
+    });
+  }
+  </script>
+
   <h1>My phone app (PWA)</h1>
   <p>If you can see this, it’s working.</p>
 </body>
