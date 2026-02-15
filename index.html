@@ -358,9 +358,9 @@
       <div class="chart-header">
         <h2 class="section-title" style="margin:0;">Trend Log</h2>
         <div id="chartRangeTabs" class="chart-range-tabs" role="tablist" aria-label="Chart range">
-          <button type="button" class="range-tab" data-range="30">1M</button>
+          <button type="button" class="range-tab active" data-range="30">1M</button>
           <button type="button" class="range-tab" data-range="90">3M</button>
-          <button type="button" class="range-tab active" data-range="183">6M</button>
+          <button type="button" class="range-tab" data-range="183">6M</button>
           <button type="button" class="range-tab" data-range="365">12M</button>
           <button type="button" class="range-tab" data-range="all">All</button>
         </div>
@@ -442,7 +442,7 @@
     const periodInfoPanel = document.getElementById("periodInfoPanel");
     const inseminationInfoBtn = document.getElementById("inseminationInfoBtn");
     const inseminationInfoPanel = document.getElementById("inseminationInfoPanel");
-    let selectedChartRange = "183";
+    let selectedChartRange = "30";
 
     tempDateEl.value = isoToday();
     periodStartEl.value = isoToday();
