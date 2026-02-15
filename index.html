@@ -29,6 +29,7 @@
         radial-gradient(circle at bottom left, #fdeed8 0%, transparent 40%),
         var(--bg);
       min-height: 100vh;
+      overflow-x: hidden;
     }
     main {
       max-width: 860px;
@@ -36,6 +37,7 @@
       padding: 20px 14px 32px;
       display: grid;
       gap: 14px;
+      overflow-x: clip;
     }
     .hero {
       padding: 16px 18px;
@@ -52,6 +54,7 @@
       border-radius: var(--radius);
       padding: 14px;
       box-shadow: 0 4px 18px rgba(13, 52, 48, 0.06);
+      min-width: 0;
     }
     .section-title { font-size: 1rem; margin-bottom: 10px; }
     form { display: grid; gap: 10px; }
@@ -78,10 +81,19 @@
     }
     .chart-wrap {
       width: 100%;
+      min-width: 0;
       overflow-x: auto;
+      overflow-y: hidden;
       border: 1px solid var(--line);
       border-radius: 12px;
       background: #fcfffe;
+      -webkit-overflow-scrolling: touch;
+      max-width: 100%;
+    }
+    .chart-inner {
+      min-width: 100%;
+      height: 280px;
+      max-width: none;
     }
     .chart-header {
       display: flex;
@@ -225,7 +237,7 @@
     </section>
     <section class="card">
       <div class="chart-header">
-        <h2 class="section-title" style="margin:0;">Temperature Trend</h2>
+        <h2 class="section-title" style="margin:0;">Trend Log</h2>
         <div id="chartRangeTabs" class="chart-range-tabs" role="tablist" aria-label="Chart range">
           <button type="button" class="range-tab" data-range="30">1M</button>
           <button type="button" class="range-tab" data-range="90">3M</button>
@@ -234,7 +246,7 @@
           <button type="button" class="range-tab" data-range="all">All</button>
         </div>
       </div>
-      <div class="chart-wrap"><svg id="tempChart" viewBox="0 0 800 280" preserveAspectRatio="none" aria-label="Basal temperature chart"></svg></div>
+      <div class="chart-wrap"><div id="chartInner" class="chart-inner"><svg id="tempChart" viewBox="0 0 800 280" preserveAspectRatio="none" aria-label="Basal temperature chart"></svg></div></div>
       <div id="chartHint" class="muted"></div>
       <div class="insight-grid" id="insightGrid"></div>
       <p class="muted">Ovulation estimate is based on average cycle length and should not be treated as medical advice.</p>
@@ -275,6 +287,7 @@
     const tempsListEl = document.getElementById("tempsList");
     const periodsListEl = document.getElementById("periodsList");
     const chartEl = document.getElementById("tempChart");
+    const chartInnerEl = document.getElementById("chartInner");
     const chartRangeTabsEl = document.getElementById("chartRangeTabs");
     const chartHintEl = document.getElementById("chartHint");
     const insightGridEl = document.getElementById("insightGrid");
@@ -561,6 +574,7 @@
       if (!state.temperatures.length) {
         chartEl.innerHTML = "";
         chartEl.style.width = "100%";
+        chartInnerEl.style.width = "100%";
         chartHintEl.textContent = "Add temperature entries to see your trend line.";
         return;
       }
@@ -575,6 +589,7 @@
       if (display.length < 1) {
         chartEl.innerHTML = "";
         chartEl.style.width = "100%";
+        chartInnerEl.style.width = "100%";
         chartHintEl.textContent = "No temperature entries in this range.";
         return;
       }
@@ -600,7 +615,8 @@
       const innerH = height - padT - padB;
 
       chartEl.setAttribute("viewBox", `0 0 ${width} ${height}`);
-      chartEl.style.width = `${width}px`;
+      chartInnerEl.style.width = `${width}px`;
+      chartEl.style.width = "100%";
       chartEl.style.height = `${height}px`;
 
       const xForDate = (iso) => {
@@ -625,6 +641,30 @@
         `;
       }).join("");
 
+      const monthBoundaries = [];
+      let boundary = new Date(minXDate.getFullYear(), minXDate.getMonth(), 1);
+      if (boundary <= minXDate) {
+        boundary.setMonth(boundary.getMonth() + 1);
+      }
+      while (boundary <= maxXDate) {
+        monthBoundaries.push(new Date(boundary));
+        boundary.setMonth(boundary.getMonth() + 1);
+      }
+
+      const monthEdges = [new Date(minXDate), ...monthBoundaries, new Date(maxXDate)];
+      const monthBands = monthEdges.slice(0, -1).map((edgeStart, idx) => {
+        const edgeEnd = monthEdges[idx + 1];
+        const x1 = xForDate(edgeStart.toISOString().slice(0, 10));
+        const x2 = xForDate(edgeEnd.toISOString().slice(0, 10));
+        const fill = idx % 2 === 0 ? "#f7fbfa" : "#fcfffe";
+        return `<rect x="${x1}" y="${padT}" width="${Math.max(x2 - x1, 1)}" height="${innerH}" fill="${fill}" opacity="0.8"></rect>`;
+      }).join("");
+
+      const monthLines = monthBoundaries.map((d) => {
+        const x = xForDate(d.toISOString().slice(0, 10));
+        return `<line x1="${x}" y1="${padT}" x2="${x}" y2="${padT + innerH}" stroke="#cbded8" stroke-width="1.2" opacity="0.95"></line>`;
+      }).join("");
+
       const periodRects = state.periods.map((p) => {
         const start = new Date(p.start);
         const end = new Date(p.end);
@@ -645,15 +685,34 @@
         return `${i === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
       }).join(" ");
 
-      const valueTiles = display.map((d) => {
+      const monthlyExtremes = {};
+      display.forEach((d) => {
+        const monthKey = d.date.slice(0, 7);
+        if (!monthlyExtremes[monthKey]) {
+          monthlyExtremes[monthKey] = { min: d.chartValue, max: d.chartValue };
+          return;
+        }
+        monthlyExtremes[monthKey].min = Math.min(monthlyExtremes[monthKey].min, d.chartValue);
+        monthlyExtremes[monthKey].max = Math.max(monthlyExtremes[monthKey].max, d.chartValue);
+      });
+
+      const pointMarks = display.map((d) => {
         const centerX = xForDate(d.date);
         const centerY = yForTemp(d.chartValue);
         const x = Math.max(padL, Math.min(width - padR - tileW, centerX - (tileW / 2)));
-        const y = Math.max(padT, Math.min(padT + innerH - tileH, centerY - (tileH / 2)));
+        const y = Math.max(padT, Math.min(padT + innerH - tileH, centerY - tileH - 6));
+        const monthKey = d.date.slice(0, 7);
+        const extremes = monthlyExtremes[monthKey];
+        const pinned = Math.abs(d.chartValue - extremes.max) < 0.001 || Math.abs(d.chartValue - extremes.min) < 0.001;
+        const pinnedClass = pinned ? " pinned" : "";
+
         return `
-          <g>
-            <rect x="${x}" y="${y}" width="${tileW}" height="${tileH}" rx="6" fill="#0f766e" />
-            <text x="${x + (tileW / 2)}" y="${y + 14}" text-anchor="middle" font-size="9" font-weight="700" fill="#ffffff">${d.chartValue.toFixed(1)}</text>
+          <g class="point${pinnedClass}">
+            <circle cx="${centerX}" cy="${centerY}" r="3.2" fill="#0f766e"></circle>
+            <g class="value-label">
+              <rect x="${x}" y="${y}" width="${tileW}" height="${tileH}" rx="6" fill="#0f766e" />
+              <text x="${x + (tileW / 2)}" y="${y + 14}" text-anchor="middle" font-size="9" font-weight="700" fill="#ffffff">${d.chartValue.toFixed(1)}</text>
+            </g>
           </g>
         `;
       }).join("");
@@ -663,15 +722,22 @@
       }).join("");
 
       chartEl.innerHTML = `
+        <style>
+          .point .value-label { opacity: 0; transition: opacity 120ms ease; }
+          .point:hover .value-label { opacity: 1; }
+          .point.pinned .value-label { opacity: 1; }
+        </style>
         <rect x="0" y="0" width="${width}" height="${height}" fill="#fcfffe"></rect>
+        ${monthBands}
         ${yGrid}
+        ${monthLines}
         ${periodRects}
         <path d="${connectorPath}" fill="none" stroke="#5ea79f" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"></path>
-        ${valueTiles}
+        ${pointMarks}
         ${xLabels}
       `;
 
-      chartHintEl.textContent = "Pink areas show period days. Squares show temperature values in Fahrenheit. Scroll horizontally to view long ranges.";
+      chartHintEl.textContent = "Alternating month blocks and vertical lines mark each month. Pink areas show period days. Hover dots to reveal values. Monthly high/low values stay visible.";
     }
 
     function render() {
