@@ -144,6 +144,13 @@
       padding: 6px 10px;
       font-size: 0.8rem;
     }
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
     .info-panel {
       margin-top: 8px;
       border: 1px solid var(--line);
@@ -260,7 +267,23 @@
       <p>Track daily basal temperature and period dates in one place.</p>
     </section>
     <section class="card">
-      <h2 class="section-title">Daily Basal Temperature</h2>
+      <div class="section-head">
+        <h2 class="section-title" style="margin:0;">Daily Basal Temperature</h2>
+        <button id="tempInfoBtn" type="button" class="btn-info">Info</button>
+      </div>
+      <div id="tempInfoPanel" class="info-panel" hidden>
+        <strong><u>About This Section</u></strong><br>
+        <br>
+        This section is for your Basal Body Temperature (BBT), which is your resting temperature right after waking up.<br>
+        <br>
+        <strong>How to take it correctly:</strong><br>
+        1. Take it immediately after waking, before getting out of bed.<br>
+        2. Take it at about the same time each morning.<br>
+        3. Use the same thermometer each day.<br>
+        4. Record the value right away in this app.<br>
+        <br>
+        Consistent timing helps make your chart more accurate and easier to interpret.
+      </div>
       <form id="tempForm">
         <div class="row">
           <label>Date<input id="tempDate" type="date" required></label>
@@ -273,18 +296,56 @@
       </form>
     </section>
     <section class="card">
-      <h2 class="section-title">Period Dates</h2>
+      <div class="section-head">
+        <h2 class="section-title" style="margin:0;">Period Dates</h2>
+        <button id="periodInfoBtn" type="button" class="btn-info">Info</button>
+      </div>
+      <div id="periodInfoPanel" class="info-panel" hidden>
+        <strong><u>About This Section</u></strong><br>
+        <br>
+        Use this section to log the start and end of each period. This helps estimate cycle length and future fertile windows.<br>
+        <br>
+        <strong>How to use it:</strong><br>
+        1. Log the first day of bleeding using Start date.<br>
+        2. When bleeding ends, log End date later.<br>
+        3. The app pairs them into one period range automatically.<br>
+        <br>
+        <strong>Helpful tips:</strong><br>
+        1. Enter dates as soon as possible for better accuracy.<br>
+        2. If bleeding patterns are unusual, still log what happened to keep your history complete.<br>
+        3. For the best results, consider sharing your tracked data with your medical professional so they can provide personalized guidance.
+      </div>
       <form id="periodForm">
         <div class="row">
-          <label>Start date<input id="periodStart" type="date" required></label>
-          <label>End date<input id="periodEnd" type="date" required></label>
+          <label>Start date<input id="periodStart" type="date"></label>
+          <div style="display:grid;align-items:end;"><button id="periodStartBtn" class="btn-main" type="button">Log Period Start</button></div>
         </div>
-        <button class="btn-main" type="submit">Save Period Range</button>
+        <div class="row">
+          <label>End date<input id="periodEnd" type="date"></label>
+          <div style="display:grid;align-items:end;"><button id="periodEndBtn" class="btn-main" type="button">Log Period End</button></div>
+        </div>
       </form>
+      <p id="periodDraftStatus" class="muted"></p>
       <p class="muted">Period ranges are highlighted on the chart.</p>
     </section>
     <section class="card">
-      <h2 class="section-title">Conception Tracking</h2>
+      <div class="section-head">
+        <h2 class="section-title" style="margin:0;">Conception Tracking</h2>
+        <button id="inseminationInfoBtn" type="button" class="btn-info">Info</button>
+      </div>
+      <div id="inseminationInfoPanel" class="info-panel" hidden>
+        <strong><u>About This Section</u></strong><br>
+        <br>
+        Use this section to track insemination dates. This helps you compare timing against cycle, period, and temperature patterns.<br>
+        <br>
+        <strong>How to use it:</strong><br>
+        1. Log each insemination date on the day it occurs.<br>
+        2. Add every relevant date to keep your timeline complete.<br>
+        3. Review these markers on the chart alongside period and temperature data.<br>
+        <br>
+        <strong>Helpful tip:</strong><br>
+        If you are trying to conceive, sharing this timeline with your medical professional can support more personalized guidance.
+      </div>
       <form id="inseminationForm">
         <div class="row">
           <label>Insemination Date<input id="inseminationDate" type="date" required></label>
@@ -349,7 +410,6 @@
     const state = loadState();
 
     const tempForm = document.getElementById("tempForm");
-    const periodForm = document.getElementById("periodForm");
     const inseminationForm = document.getElementById("inseminationForm");
     const exportBtn = document.getElementById("exportBtn");
     const demo3mBtn = document.getElementById("demo3mBtn");
@@ -361,6 +421,9 @@
     const tempUnitEl = document.getElementById("tempUnit");
     const periodStartEl = document.getElementById("periodStart");
     const periodEndEl = document.getElementById("periodEnd");
+    const periodStartBtn = document.getElementById("periodStartBtn");
+    const periodEndBtn = document.getElementById("periodEndBtn");
+    const periodDraftStatusEl = document.getElementById("periodDraftStatus");
     const inseminationDateEl = document.getElementById("inseminationDate");
 
     const tempsListEl = document.getElementById("tempsList");
@@ -373,6 +436,12 @@
     const insightGridEl = document.getElementById("insightGrid");
     const insightInfoBtn = document.getElementById("insightInfoBtn");
     const insightInfoPanel = document.getElementById("insightInfoPanel");
+    const tempInfoBtn = document.getElementById("tempInfoBtn");
+    const tempInfoPanel = document.getElementById("tempInfoPanel");
+    const periodInfoBtn = document.getElementById("periodInfoBtn");
+    const periodInfoPanel = document.getElementById("periodInfoPanel");
+    const inseminationInfoBtn = document.getElementById("inseminationInfoBtn");
+    const inseminationInfoPanel = document.getElementById("inseminationInfoPanel");
     let selectedChartRange = "183";
 
     tempDateEl.value = isoToday();
@@ -401,20 +470,42 @@
       render();
     });
 
-    periodForm.addEventListener("submit", (event) => {
-      event.preventDefault();
+    periodStartBtn.addEventListener("click", () => {
       const start = periodStartEl.value;
-      const end = periodEndEl.value;
-      if (!start || !end) return;
-
-      if (new Date(start) > new Date(end)) {
-        alert("Start date cannot be after end date.");
+      if (!start) {
+        alert("Choose a period start date first.");
+        return;
+      }
+      if (state.periodDraftStart) {
+        alert("An active period start already exists. Log the end date before starting a new one.");
         return;
       }
 
-      const existing = state.periods.find((p) => p.start === start && p.end === end);
-      if (!existing) state.periods.push({ start, end });
+      state.periodDraftStart = start;
+      saveState();
+      render();
+    });
 
+    periodEndBtn.addEventListener("click", () => {
+      const end = periodEndEl.value;
+      if (!end) {
+        alert("Choose a period end date first.");
+        return;
+      }
+      if (!state.periodDraftStart) {
+        alert("Log a period start date first.");
+        return;
+      }
+      if (new Date(state.periodDraftStart) > new Date(end)) {
+        alert("End date cannot be before the active start date.");
+        return;
+      }
+
+      const existing = state.periods.find((p) => p.start === state.periodDraftStart && p.end === end);
+      if (!existing) {
+        state.periods.push({ start: state.periodDraftStart, end });
+      }
+      state.periodDraftStart = null;
       sortPeriods();
       saveState();
       render();
@@ -458,6 +549,18 @@
       insightInfoPanel.hidden = !insightInfoPanel.hidden;
     });
 
+    tempInfoBtn.addEventListener("click", () => {
+      tempInfoPanel.hidden = !tempInfoPanel.hidden;
+    });
+
+    periodInfoBtn.addEventListener("click", () => {
+      periodInfoPanel.hidden = !periodInfoPanel.hidden;
+    });
+
+    inseminationInfoBtn.addEventListener("click", () => {
+      inseminationInfoPanel.hidden = !inseminationInfoPanel.hidden;
+    });
+
     demo3mBtn.addEventListener("click", () => {
       addDemoTemperatures(90);
     });
@@ -481,16 +584,17 @@
 
     function loadState() {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return { temperatures: [], periods: [], inseminations: [] };
+      if (!raw) return { temperatures: [], periods: [], inseminations: [], periodDraftStart: null };
       try {
         const parsed = JSON.parse(raw);
         return {
           temperatures: Array.isArray(parsed.temperatures) ? parsed.temperatures : [],
           periods: Array.isArray(parsed.periods) ? parsed.periods : [],
-          inseminations: Array.isArray(parsed.inseminations) ? parsed.inseminations : []
+          inseminations: Array.isArray(parsed.inseminations) ? parsed.inseminations : [],
+          periodDraftStart: typeof parsed.periodDraftStart === "string" ? parsed.periodDraftStart : null
         };
       } catch {
-        return { temperatures: [], periods: [], inseminations: [] };
+        return { temperatures: [], periods: [], inseminations: [], periodDraftStart: null };
       }
     }
 
@@ -651,7 +755,9 @@
 
     function renderPeriodsList() {
       if (!state.periods.length) {
-        periodsListEl.innerHTML = "<p class='muted'>No period ranges yet.</p>";
+        periodsListEl.innerHTML = state.periodDraftStart
+          ? `<div class="entry"><div><strong>Active period started: ${formatDate(state.periodDraftStart)}</strong><small>Waiting for end date</small></div></div>`
+          : "<p class='muted'>No period ranges yet.</p>";
         return;
       }
 
@@ -661,7 +767,7 @@
       const byYear = groupMonthKeysByYear(monthKeys);
       const yearKeys = Object.keys(byYear).sort((a, b) => b.localeCompare(a));
 
-      periodsListEl.innerHTML = yearKeys.map((yearKey, yearIdx) => {
+      const listHtml = yearKeys.map((yearKey, yearIdx) => {
         const months = byYear[yearKey];
         const yearCount = months.reduce((sum, monthKey) => sum + grouped[monthKey].length, 0);
 
@@ -697,6 +803,11 @@
           </details>
         `;
       }).join("");
+
+      const activeHtml = state.periodDraftStart
+        ? `<div class="entry"><div><strong>Active period started: ${formatDate(state.periodDraftStart)}</strong><small>Waiting for end date</small></div></div>`
+        : "";
+      periodsListEl.innerHTML = `${activeHtml}${listHtml}`;
 
       periodsListEl.querySelectorAll("[data-delete-period]").forEach((btn) => {
         btn.addEventListener("click", () => {
@@ -802,7 +913,7 @@
     }
 
     function renderChart() {
-      if (!state.temperatures.length && !state.periods.length && !state.inseminations.length) {
+      if (!state.temperatures.length && !state.periods.length && !state.inseminations.length && !state.periodDraftStart) {
         chartEl.innerHTML = "";
         chartEl.style.width = "100%";
         chartInnerEl.style.width = "100%";
@@ -814,8 +925,10 @@
       const tempDates = chartData.map((t) => new Date(t.date));
       const periodStarts = state.periods.map((p) => new Date(p.start));
       const periodEnds = state.periods.map((p) => new Date(p.end));
+      const draftStartDates = state.periodDraftStart ? [new Date(state.periodDraftStart)] : [];
+      const draftEndDates = state.periodDraftStart ? [new Date(isoToday())] : [];
       const inseminationDates = state.inseminations.map((entry) => new Date(entry.date));
-      const allDates = [...tempDates, ...periodStarts, ...periodEnds, ...inseminationDates];
+      const allDates = [...tempDates, ...periodStarts, ...periodEnds, ...draftStartDates, ...draftEndDates, ...inseminationDates];
       const maxDate = new Date(Math.max(...allDates.map((d) => d.getTime())));
       const rangeValue = selectedChartRange;
       const days = rangeValue === "all" ? null : Number(rangeValue);
@@ -829,12 +942,15 @@
       });
 
       const hasPeriodInRange = state.periods.some((p) => new Date(p.end) >= minDate && new Date(p.start) <= maxRangeDate);
+      const hasDraftPeriodInRange = state.periodDraftStart
+        ? new Date(isoToday()) >= minDate && new Date(state.periodDraftStart) <= maxRangeDate
+        : false;
       const hasInseminationInRange = state.inseminations.some((entry) => {
         const d = new Date(entry.date);
         return d >= minDate && d <= maxRangeDate;
       });
 
-      if (!display.length && !hasPeriodInRange && !hasInseminationInRange) {
+      if (!display.length && !hasPeriodInRange && !hasDraftPeriodInRange && !hasInseminationInRange) {
         chartEl.innerHTML = "";
         chartEl.style.width = "100%";
         chartInnerEl.style.width = "100%";
@@ -966,7 +1082,12 @@
         }
       });
 
-      const periodRects = state.periods.map((p) => {
+      const periodRangesForChart = [...state.periods];
+      if (state.periodDraftStart) {
+        periodRangesForChart.push({ start: state.periodDraftStart, end: isoToday() });
+      }
+
+      const periodRects = periodRangesForChart.map((p) => {
         const start = new Date(p.start);
         const end = new Date(p.end);
         if (end < minXDate || start > maxXDate) return "";
@@ -1095,6 +1216,9 @@
       sortTemps();
       sortPeriods();
       sortInseminations();
+      periodDraftStatusEl.textContent = state.periodDraftStart
+        ? `Active period started on ${formatDate(state.periodDraftStart)}. Log an end date when it is complete.`
+        : "No active period start.";
       renderTempsList();
       renderPeriodsList();
       renderInseminationsList();
